@@ -15,3 +15,8 @@ Before we begin, we need to collect all the config values we need to run the app
 
 # Next MileStone
 I will be adding one to one video/audio call with ring tone as well
+
+# Help
+If you need help you can contact me
+[LinkedIn Profile](https://www.linkedin.com/in/ror-champ/).
+
