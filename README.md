@@ -12,3 +12,6 @@ Before we begin, we need to collect all the config values we need to run the app
 - http://localhost:3000/calls
 ```
 - you can run the ngrock to see how it will look on multiple user or you can use new private window just make sure room name should be the same to connect
+
+# Next MileStone
+I will be adding one to one video/audio call with ring tone as well
