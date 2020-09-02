@@ -1,20 +1,4 @@
-**NEW:** Please check out our [Best Practices Guide](https://www.twilio.com/docs/video/build-js-video-application-recommendations-and-best-practices)
-for building video applications with twilio-video.js.
-
-# Twilio Video Quickstart for JavaScript and Rails
-
-[![OS X/Linus Build Status](https://secure.travis-ci.org/twilio/video-quickstart-js.png?branch=master)](http://travis-ci.org/twilio/video-quickstart-js) [![Windows Build status](https://ci.appveyor.com/api/projects/status/3u69uy9c0lsap3dr?svg=true)](https://ci.appveyor.com/project/markandrus/video-quickstart-js)
-
-_For Twilio Video 1.x Quickstart, go [here](https://github.com/twilio/video-quickstart-js/tree/1.x)._
-
-## Overview
-
-This application should give you a ready-made starting point for writing your
-own video apps with Twilio Video.
-
-![screenshot of chat app](quickstart/public/quickstart.png)
-
-## Setup Requirements
+# Twilio Multiparty Video Quickstart for JavaScript and Rails
 
 Before we begin, we need to collect all the config values we need to run the application:
 
