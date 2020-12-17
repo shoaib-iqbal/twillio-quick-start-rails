@@ -1,4 +1,5 @@
 RailsVideoTwilio::Application.routes.draw do
+  root to: 'calls#index'
   resources :calls do
     get 'token', on: :collection
   end
