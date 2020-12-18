@@ -1,0 +1,372 @@
+<!doctype html>
+<html>
+  <head>
+    <style type="text/css">
+      html, body {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+      #root:not(.withChat) {
+        display: block;
+        width: 100%;
+        height: 100%;
+        margin-top: 20px;
+      }
+      #root.withChat {
+        display: grid;
+        grid-template-columns: 75% 25%;
+        height: 100%;
+        margin-top: 20px;
+      }
+
+      /* video section */
+
+      .container {
+        width: calc(100% - 5px);
+        height: 100%;
+        padding-right: 5px;
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+      }
+      .participant {
+        margin-bottom: 10px;
+        margin-right: 5px;
+        display: grid;
+        grid-template-rows: auto 20px;
+      }
+      .participant div {
+        text-align: center;
+      }
+      .participant div video {
+        background-color: #eee;
+        border: 1px solid black;
+      }
+      .participant div video:not(.trackZoomed) {
+        width: 240px;
+        height: 180px;
+      }
+      .participant .label {
+        background-color: #ddd;
+        padding: 2px;
+      }
+      .participantZoomed {
+        width: 100%;
+        height: calc(100% - 5px);
+        grid-template-rows: auto 30px;
+      }
+      .participantHidden {
+        display: none;
+      }
+      .trackZoomed {
+        width: 100%;
+        height: 100%;
+      }
+      .participantZoomed div video:not(.trackZoomed) {
+        display: none;
+      }
+      .participantHidden div video {
+        display: none;
+      }
+      .participantHidden .label {
+        display: none;
+      }
+      .participantZoomed .label {
+        margin-top: 8px;
+      }
+
+      /* chat section */
+
+      #root.withChat #chat {
+        width: calc(100% - 10px);
+        display: grid;
+        grid-template-rows: auto 30px;
+        border-left: 1px solid black;
+        padding: 5px;
+      }
+      #root:not(withChat) #chat {
+        display: none;
+      }
+      #chat #chat-scroll {
+        overflow: auto;
+      }
+      #chat #chat-content {
+        margin-top: 10px;
+        margin-bottom: 10px;
+        line-height: 1em;
+        max-height: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Flask & Twilio Video Conference</h1>
+    <form>
+        <label for="username">Name: </label>
+        <input type="text" name=”username” id="username">
+        <button id="join_leave">Join call</button>
+        <button id="share_screen" disabled>Share screen</button>
+        <button id="toggle_chat" disabled>Toggle chat</button>
+    </form>
+    <p id="count">Disconnected.</p>
+    <div id="root">
+        <div id="container" class="container">
+            <div id="local" class="participant"><div></div><div class="label">Me</div></div>
+            <!-- more participants will be added dynamically here -->
+        </div>
+        <div id="chat">
+            <div id="chat-scroll">
+                <div id="chat-content">
+                    <!-- chat content will be added dynamically here -->
+                </div>
+            </div>
+            <input id="chat-input" type="text">
+        </div>
+    </div>
+    <script src="https://media.twiliocdn.com/sdk/js/video/releases/2.3.0/twilio-video.min.js"></script>
+    <script src="https://media.twiliocdn.com/sdk/js/conversations/releases/1.0.0/twilio-conversations.min.js"></script>
+  </body>
+</html>
+
+<script type="text/javascript">
+  const root = document.getElementById('root');
+  const usernameInput = document.getElementById('username');
+  const button = document.getElementById('join_leave');
+  const shareScreen = document.getElementById('share_screen');
+  const toggleChat = document.getElementById('toggle_chat');
+  const container = document.getElementById('container');
+  const count = document.getElementById('count');
+  const chatScroll = document.getElementById('chat-scroll');
+  const chatContent = document.getElementById('chat-content');
+  const chatInput = document.getElementById('chat-input');
+  let connected = false;
+  let room;
+  let chat;
+  let conv;
+  let screenTrack;
+
+  function addLocalVideo() {
+      Twilio.Video.createLocalVideoTrack().then(track => {
+          let video = document.getElementById('local').firstChild;
+          let trackElement = track.attach();
+          trackElement.addEventListener('click', () => { zoomTrack(trackElement); });
+          video.appendChild(trackElement);
+      });
+  };
+
+  function connectButtonHandler(event) {
+      event.preventDefault();
+      if (!connected) {
+          let username = usernameInput.value;
+          if (!username) {
+              alert('Enter your name before connecting');
+              return;
+          }
+          button.disabled = true;
+          button.innerHTML = 'Connecting...';
+          connect(username).then(() => {
+              button.innerHTML = 'Leave call';
+              button.disabled = false;
+              shareScreen.disabled = false;
+          }).catch(() => {
+              alert('Connection failed. Is the backend running?');
+              button.innerHTML = 'Join call';
+              button.disabled = false;
+          });
+      }
+      else {
+          disconnect();
+          button.innerHTML = 'Join call';
+          connected = false;
+          shareScreen.innerHTML = 'Share screen';
+          shareScreen.disabled = true;
+      }
+  };
+
+  function connect(username) {
+      //let promise = new Promise((resolve, reject) => {
+          // get a token from the back end
+          let data =  {token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiIsImN0eSI6InR3aWxpby1mcGE7dj0xIn0.eyJqdGkiOiJTSzA2ODQyYTk0YjhhZGZlYTI1YTVhMTFiZTQ3YWYzNTdkLTE2MDgyNzg3NDIiLCJpc3MiOiJTSzA2ODQyYTk0YjhhZGZlYTI1YTVhMTFiZTQ3YWYzNTdkIiwic3ViIjoiQUNiMmI5NGY2ZjhjYjgxZTIwOGMxOWQ0ZTRkNTg2MGU1MSIsImV4cCI6MTYwODI4MjM0MiwiZ3JhbnRzIjp7ImlkZW50aXR5IjoiNiIsInZpZGVvIjp7InJvb20iOiJNeSBSb29tIn19fQ.g9sj-_KPlJ8lY0UH2Ah51qequpWqi9l_Cxr-RBnBOAo", conversation_sid: "6"}
+        return Twilio.Video.connect(data.token);  
+  };
+
+  function updateParticipantCount() {
+      if (!connected)
+          count.innerHTML = 'Disconnected.';
+      else
+          count.innerHTML = (room.participants.size + 1) + ' participants online.';
+  };
+
+  function participantConnected(participant) {
+      let participantDiv = document.createElement('div');
+      participantDiv.setAttribute('id', participant.sid);
+      participantDiv.setAttribute('class', 'participant');
+
+      let tracksDiv = document.createElement('div');
+      participantDiv.appendChild(tracksDiv);
+
+      let labelDiv = document.createElement('div');
+      labelDiv.setAttribute('class', 'label');
+      labelDiv.innerHTML = participant.identity;
+      participantDiv.appendChild(labelDiv);
+
+      container.appendChild(participantDiv);
+
+      participant.tracks.forEach(publication => {
+          if (publication.isSubscribed)
+              trackSubscribed(tracksDiv, publication.track);
+      });
+      participant.on('trackSubscribed', track => trackSubscribed(tracksDiv, track));
+      participant.on('trackUnsubscribed', trackUnsubscribed);
+
+      updateParticipantCount();
+  };
+
+  function participantDisconnected(participant) {
+      document.getElementById(participant.sid).remove();
+      updateParticipantCount();
+  };
+
+  function trackSubscribed(div, track) {
+      let trackElement = track.attach();
+      trackElement.addEventListener('click', () => { zoomTrack(trackElement); });
+      div.appendChild(trackElement);
+  };
+
+  function trackUnsubscribed(track) {
+      track.detach().forEach(element => {
+          if (element.classList.contains('participantZoomed')) {
+              zoomTrack(element);
+          }
+          element.remove()
+      });
+  };
+
+  function disconnect() {
+      room.disconnect();
+      if (chat) {
+          chat.shutdown().then(() => {
+              conv = null;
+              chat = null;
+          });
+      }
+      while (container.lastChild.id != 'local')
+          container.removeChild(container.lastChild);
+      button.innerHTML = 'Join call';
+      if (root.classList.contains('withChat')) {
+          root.classList.remove('withChat');
+      }
+      toggleChat.disabled = true;
+      connected = false;
+      updateParticipantCount();
+  };
+
+  function shareScreenHandler() {
+      event.preventDefault();
+      if (!screenTrack) {
+          navigator.mediaDevices.getDisplayMedia().then(stream => {
+              screenTrack = new Twilio.Video.LocalVideoTrack(stream.getTracks()[0]);
+              room.localParticipant.publishTrack(screenTrack);
+              screenTrack.mediaStreamTrack.onended = () => { shareScreenHandler() };
+              console.log(screenTrack);
+              shareScreen.innerHTML = 'Stop sharing';
+          }).catch(() => {
+              alert('Could not share the screen.')
+          });
+      }
+      else {
+          room.localParticipant.unpublishTrack(screenTrack);
+          screenTrack.stop();
+          screenTrack = null;
+          shareScreen.innerHTML = 'Share screen';
+      }
+  };
+
+  function zoomTrack(trackElement) {
+      if (!trackElement.classList.contains('trackZoomed')) {
+          // zoom in
+          container.childNodes.forEach(participant => {
+              if (participant.classList && participant.classList.contains('participant')) {
+                  let zoomed = false;
+                  participant.childNodes[0].childNodes.forEach(track => {
+                      if (track === trackElement) {
+                          track.classList.add('trackZoomed')
+                          zoomed = true;
+                      }
+                  });
+                  if (zoomed) {
+                      participant.classList.add('participantZoomed');
+                  }
+                  else {
+                      participant.classList.add('participantHidden');
+                  }
+              }
+          });
+      }
+      else {
+          // zoom out
+          container.childNodes.forEach(participant => {
+              if (participant.classList && participant.classList.contains('participant')) {
+                  participant.childNodes[0].childNodes.forEach(track => {
+                      if (track === trackElement) {
+                          track.classList.remove('trackZoomed');
+                      }
+                  });
+                  participant.classList.remove('participantZoomed')
+                  participant.classList.remove('participantHidden')
+              }
+          });
+      }
+  };
+
+  function connectChat(token, conversationSid) {
+      return Twilio.Conversations.Client.create(token).then(_chat => {
+          chat = _chat;
+          return chat.getConversationBySid(conversationSid).then((_conv) => {
+              conv = _conv;
+              conv.on('messageAdded', (message) => {
+                  addMessageToChat(message.author, message.body);
+              });
+              return conv.getMessages().then((messages) => {
+                  chatContent.innerHTML = '';
+                  for (let i = 0; i < messages.items.length; i++) {
+                      addMessageToChat(messages.items[i].author, messages.items[i].body);
+                  }
+                  toggleChat.disabled = false;
+              });
+          });
+      }).catch(e => {
+          console.log(e);
+      });
+  };
+
+  function addMessageToChat(user, message) {
+      chatContent.innerHTML += `<p><b>${user}</b>: ${message}`;
+      chatScroll.scrollTop = chatScroll.scrollHeight;
+  }
+
+  function toggleChatHandler() {
+      event.preventDefault();
+      if (root.classList.contains('withChat')) {
+          root.classList.remove('withChat');
+      }
+      else {
+          root.classList.add('withChat');
+          chatScroll.scrollTop = chatScroll.scrollHeight;
+      }
+  };
+
+  function onChatInputKey(ev) {
+      if (ev.keyCode == 13) {
+          conv.sendMessage(chatInput.value);
+          chatInput.value = '';
+      }
+  };
+
+  addLocalVideo();
+  button.addEventListener('click', connectButtonHandler);
+  shareScreen.addEventListener('click', shareScreenHandler);
+  toggleChat.addEventListener('click', toggleChatHandler);
+  chatInput.addEventListener('keyup', onChatInputKey);
+
+</script>

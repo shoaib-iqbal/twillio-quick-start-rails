@@ -3,6 +3,8 @@ RailsVideoTwilio::Application.routes.draw do
   resources :calls do
     get 'token', on: :collection
   end
+  match '/screen_share', to: 'calls#screenshare'
+  post '/login', to: 'calls#token'
   # The priority is based upon order of creation:
   # first created -> highest priority.
 
